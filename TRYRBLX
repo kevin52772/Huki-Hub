@@ -1,21 +1,33 @@
+--[[ Integrated Grow A Garden Script
+     - Original script content (UI + plant automation + shop + sell etc.)
+     - Added: Pets automation (Gift All Pets) + Rayfield UI controls
+     NOTE: Jika nama remote GiftPet berbeda, ubah di bagian deklarasi remote.
+]]
+
+--// Wait for game load
+repeat task.wait() until game:IsLoaded()
+
+--// Services
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local FarmsFolder = Workspace.Farm
 local Players = game:GetService("Players")
+
+--// Remotes & others (existing)
 local BuySeedStock = ReplicatedStorage.GameEvents.BuySeedStock
 local Plant = ReplicatedStorage.GameEvents.Plant_RE
-local Backpack = Players.LocalPlayer.Backpack
-local Character = Players.LocalPlayer.Character
+local Backpack = Players.LocalPlayer:WaitForChild("Backpack")
+local Character = Players.LocalPlayer.Character or Players.LocalPlayer.CharacterAdded:Wait()
 local sellAllRemote = ReplicatedStorage.GameEvents.Sell_Inventory
 local Steven = Workspace.NPCS.Steven
 local Sam = Workspace.NPCS.Sam
-local HRP = Players.LocalPlayer.Character.HumanoidRootPart
+local HRP = Players.LocalPlayer.Character:WaitForChild("HumanoidRootPart")
 local CropsListAndStocks = {}
-local SeedShopGUI = Players.LocalPlayer.PlayerGui.Seed_Shop.Frame.ScrollingFrame
-local shopTimer = Players.LocalPlayer.PlayerGui.Seed_Shop.Frame.Frame.Timer
+local SeedShopGUI = Players.LocalPlayer.PlayerGui:WaitForChild("Seed_Shop").Frame.ScrollingFrame
+local shopTimer = Players.LocalPlayer.PlayerGui:WaitForChild("Seed_Shop").Frame.Frame.Timer
 local shopTime = 0
 local Humanoid = Character:WaitForChild("Humanoid")
-wantedFruits = {}
+local wantedFruits = {}
 local plantAura = false
 local AutoSellItems = 70
 local shouldSell = false
@@ -25,41 +37,44 @@ local shouldAutoPlant = false
 local isSelling = false
 local byteNetReliable = ReplicatedStorage:FindFirstChild("ByteNetReliable")
 
+--// Rayfield UI (existing)
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Window = Rayfield:CreateWindow({
    Name = "Grow A Garden",
-   Icon = 0, -- Icon in Topbar. Can use Lucide Icons (string) or Roblox Image (number). 0 to use no icon (default).
+   Icon = 0,
    LoadingTitle = "Rayfield Interface Suite",
    LoadingSubtitle = "by Sirius",
-   Theme = "Default", -- Check https://docs.sirius.menu/rayfield/configuration/themes
-
-   ToggleUIKeybind = "K", -- The keybind to toggle the UI visibility (string like "K" or Enum.KeyCode)
-
+   Theme = "Default",
+   ToggleUIKeybind = "K",
    DisableRayfieldPrompts = false,
-   DisableBuildWarnings = false, -- Prevents Rayfield from warning when the script has a version mismatch with the interface
-
+   DisableBuildWarnings = false,
    ConfigurationSaving = {
       Enabled = true,
-      FolderName = nil, -- Create a custom folder for your hub/game
+      FolderName = nil,
       FileName = "GAGscript"
    },
-
 })
 
+--// Helper functions (existing)
 local function findPlayerFarm()
     for i,v in pairs(FarmsFolder:GetChildren()) do
-        if v.Important.Data.Owner.Value == Players.LocalPlayer.Name then
+        if v.Important and v.Important.Data and v.Important.Data.Owner and v.Important.Data.Owner.Value == Players.LocalPlayer.Name then
             return v
         end
     end
-return nil
+    return nil
 end
 
 local function removePlantsOfKind(kind)
+    if not kind or not kind[1] then return end
     print("Kind: "..kind[1])
     local Shovel = Backpack:FindFirstChild("Shovel [Destroy Plants]")
-    Shovel.Parent = Character
-    for _,plant in pairs(findPlayerFarm().Important.Plants_Physical:GetChildren()) do
+    if Shovel then
+        Shovel.Parent = Character
+    end
+    local farm = findPlayerFarm()
+    if not farm then return end
+    for _,plant in pairs(farm.Important.Plants_Physical:GetChildren()) do
         if plant.Name == kind[1] then
             if plant:FindFirstChild("Fruit_Spawn") then
                 local spawnPoint = plant.Fruit_Spawn
@@ -73,15 +88,15 @@ end
 
 local function getAllIFromDict(Dict)
     local newList = {}
-    for i,_ in Dict do
+    for i,_ in pairs(Dict) do
         table.insert(newList, i)
     end
     return newList
 end
 
-local function isInTable(table,value)
-    for _,i in pairs(table) do
-        if i==value then
+local function isInTable(tbl, value)
+    for _,i in pairs(tbl) do
+        if i == value then
             return true
         end
     end
@@ -89,8 +104,10 @@ local function isInTable(table,value)
 end
 
 local function getPlantedFruitTypes()
-local list = {}
-    for _,plant in pairs(findPlayerFarm().Important.Plants_Physical:GetChildren()) do
+    local farm = findPlayerFarm()
+    local list = {}
+    if not farm then return list end
+    for _,plant in pairs(farm.Important.Plants_Physical:GetChildren()) do
         if not(isInTable(list, plant.Name)) then
             table.insert(list, plant.Name)
         end
@@ -98,6 +115,7 @@ local list = {}
     return list
 end
 
+-- UI / Tabs (existing)
 local Tab = Window:CreateTab("Plants", "rewind")
 Tab:CreateSection("Remove Plants")
 local PlantToRemoveDropdown = Tab:CreateDropdown({
@@ -127,10 +145,6 @@ Tab:CreateButton({
 
 Tab:CreateSection("Harvesting Plants")
 
-
-
-
-
 local function printCropStocks()
     for i,v in pairs(CropsListAndStocks) do
         print(i.."'s Stock Is:", v)
@@ -138,22 +152,22 @@ local function printCropStocks()
 end
 
 local function StripPlantStock(UnstrippedStock)
-    -- takes for example X0 stock and returns 0, basically returns the plain string number
-local num = string.match(UnstrippedStock, "%d+")
-return num
+    local num = string.match(UnstrippedStock, "%d+")
+    return num
 end
 
 function getCropsListAndStock()
+    CropsListAndStocks = {}
     for _,Plant in pairs(SeedShopGUI:GetChildren()) do
         if Plant:FindFirstChild("Main_Frame") then
             local PlantName = Plant.Name
             local PlantStock = StripPlantStock(Plant.Main_Frame.Stock_Text.Text)
-            CropsListAndStocks[PlantName] = PlantStock
+            CropsListAndStocks[PlantName] = tonumber(PlantStock) or 0
         end
     end
 end
 
-playerFarm = findPlayerFarm()
+local playerFarm = findPlayerFarm()
 getCropsListAndStock()
 
 local function getPlantingBoundaries(farm)
@@ -169,74 +183,72 @@ local function getPlantingBoundaries(farm)
     return edges
 end
 
-
-
+-- plant aura collector (existing)
 spawn(function()
     while true do
         if plantAura then
             print("Attempting to pickup plants")
-            for _, Plant in pairs(playerFarm.Important.Plants_Physical:GetChildren()) do
-
-                if Plant:FindFirstChild("Fruits") then
-
-                    for _, miniPlant in pairs(Plant.Fruits:GetChildren()) do
-
-                        for _, child in pairs(miniPlant:GetChildren()) do
-
+            if playerFarm then
+                for _, PlantModel in pairs(playerFarm.Important.Plants_Physical:GetChildren()) do
+                    if PlantModel:FindFirstChild("Fruits") then
+                        for _, miniPlant in pairs(PlantModel.Fruits:GetChildren()) do
+                            for _, child in pairs(miniPlant:GetChildren()) do
+                                if child:FindFirstChild("ProximityPrompt") then
+                                    fireproximityprompt(child.ProximityPrompt)
+                                end
+                            end
+                            task.wait(0.01)
+                        end
+                    else
+                        for _, child in pairs(PlantModel:GetChildren()) do
                             if child:FindFirstChild("ProximityPrompt") then
                                 fireproximityprompt(child.ProximityPrompt)
                             end
+                            task.wait(0.01)
                         end
-                        task.wait(0.01)
-                    end
-                else
-
-                    for _, child in pairs(Plant:GetChildren()) do
-
-                        if child:FindFirstChild("ProximityPrompt") then
-                            fireproximityprompt(child.ProximityPrompt)
-                        end
-                        task.wait(0.01) -- brb i go make me some food alright
                     end
                 end
             end
             task.wait(0.1)
         end
-
         task.wait(0.1)
     end
 end)
 
 local function collectPlant(plant : Model)
-    byteNetReliable:FireServer(buffer.fromstring("\001\001\000\001"),{ plant }) -- this one
-    print("Collecting: "..plant.Name)
+    if byteNetReliable then
+        byteNetReliable:FireServer(buffer.fromstring("\001\001\000\001"),{ plant })
+    else
+        -- fallback: try direct collect if other remote exists (not implemented)
+    end
+    print("Collecting: "..tostring(plant and plant.Name or "unknown"))
 end
 
 local function GetAllPlants()
     local plantsTable = {}
-    for _, Plant in pairs(playerFarm.Important.Plants_Physical:GetChildren()) do
-        if Plant:FindFirstChild("Fruits") then
-            for _, miniPlant in pairs(Plant.Fruits:GetChildren()) do
+    if not playerFarm then return plantsTable end
+    for _, PlantModel in pairs(playerFarm.Important.Plants_Physical:GetChildren()) do
+        if PlantModel:FindFirstChild("Fruits") then
+            for _, miniPlant in pairs(PlantModel.Fruits:GetChildren()) do
                 table.insert(plantsTable,miniPlant)
             end
         else
-            table.insert(plantsTable,Plant)
+            table.insert(plantsTable,PlantModel)
         end
     end
     return plantsTable
 end
+
 local function CollectAllPlants()
     local plants = GetAllPlants()
-    print("Got "..#plants.."Plants")
-
+    print("Got "..#plants.." Plants")
     for _,plant in pairs(plants) do
         collectPlant(plant)
         task.wait(0.01)
     end
 end
 
-Tab:CreateButton(
-{
+Tab:CreateButton({
     Name = "Collect All Plants",
     Callback = function()
         CollectAllPlants()
@@ -244,38 +256,31 @@ Tab:CreateButton(
     end,
 })
 
-
 local function getRandomPlantingLocation(edges)
-    -- Define rectangle corner pairs from the dictionary
     local rectangles = {
         {edges["1TopLeft"], edges["1BottomRight"]},
         {edges["2TopLeft"], edges["2BottomRight"]}
     }
-
-    -- Choose a rectangle randomly
     local chosen = rectangles[math.random(1, #rectangles)]
     local a = chosen[1]
     local b = chosen[2]
-
-    -- Get min/max bounds
     local minX, maxX = math.min(a.X, b.X), math.max(a.X, b.X)
     local minZ, maxZ = math.min(a.Z, b.Z), math.max(a.Z, b.Z)
     local Y = 0.13552704453468323
-
-    -- Generate random point in bounds
     local randX = math.random() * (maxX - minX) + minX
     local randZ = math.random() * (maxZ - minZ) + minZ
-
     return CFrame.new(randX, Y, randZ)
 end
+
+-- seeds detection + plantAllSeeds (existing)
 local function areThereSeeds()
-for _,Item in pairs(Backpack:GetChildren()) do
-    if Item:FindFirstChild("Seed Local Script") then
-        return true
+    for _,Item in pairs(Backpack:GetChildren()) do
+        if Item:FindFirstChild("Seed Local Script") then
+            return true
+        end
     end
-end
-print("Seeds Not Found!")
-return false
+    print("Seeds Not Found!")
+    return false
 end
 
 local function plantAllSeeds()
@@ -292,7 +297,9 @@ local function plantAllSeeds()
                     [1] = location.Position,
                     [2] = Item:GetAttribute("Seed")
                 }
-                Plant:FireServer(unpack(args))
+                pcall(function()
+                    Plant:FireServer(unpack(args))
+                end)
                 wait()
                 if Item and Item:IsDescendantOf(game) and Item.Parent ~= Backpack then
                     pcall(function()
@@ -313,19 +320,19 @@ Tab:CreateToggle({
     print("Plant Aura Set To: ".. tostring(Value))
    end,
 })
+
 local testingTab = Window:CreateTab("Testing","rewind")
 testingTab:CreateSection("List Crops Names And Prices")
-testingTab:CreateButton(
-{
+testingTab:CreateButton({
     Name = "Print Out All Crops Names And Stocks",
     Callback = function()
         printCropStocks()
         print("Printed")
     end,
 })
+
 Tab:CreateSection("Plant")
-Tab:CreateButton(
-{
+Tab:CreateButton({
     Name = "Plant all Seeds",
     Callback = function()
         plantAllSeeds()
@@ -339,24 +346,23 @@ Tab:CreateToggle({
         shouldAutoPlant = Value
     end,
 })
+
 testingTab:CreateSection("Shop")
 local RayFieldShopTimer = testingTab:CreateParagraph({Title = "Shop Timer", Content = "Waiting..."})
 
 testingTab:CreateSection("Plot Corners")
-testingTab:CreateButton(
-{
+testingTab:CreateButton({
     Name = "Teleport edges",
     Callback = function()
         local edges = getPlantingBoundaries(playerFarm)
-        for i,v in edges do
+        for i,v in pairs(edges) do
             HRP.CFrame = CFrame.new(v)
             wait(2)
         end
     end,
 })
 
-testingTab:CreateButton(
-{
+testingTab:CreateButton({
     Name = "Teleport random plantable position",
     Callback = function()
         HRP.CFrame = getRandomPlantingLocation(getPlantingBoundaries(playerFarm))
@@ -364,26 +370,21 @@ testingTab:CreateButton(
 })
 
 local function buyCropSeeds(cropName)
-
-local args = 
-{
-[1] = cropName
-}
-
-BuySeedStock:FireServer(unpack(args))
-
+    local args = {[1] = cropName}
+    BuySeedStock:FireServer(unpack(args))
 end
-
-
 
 function buyWantedCropSeeds()
     local beforePos = HRP.CFrame
     wait()
     HRP.CFrame = Sam.HumanoidRootPart.CFrame
     wait(0.1)
-    for i in wantedFruits do
-        for j = 0,CropsListAndStocks[wantedFruits[i]] do
-            buyCropSeeds(wantedFruits[i])
+    for i = 1, #wantedFruits do
+        local fruit = wantedFruits[i]
+        local stock = CropsListAndStocks[fruit] or 0
+        for j = 1, stock do
+            buyCropSeeds(fruit)
+            task.wait(0.05)
         end
     end
     wait()
@@ -414,7 +415,7 @@ local function sellAll()
     HRP.CFrame = Steven.HumanoidRootPart.CFrame
     wait(0.3)
     sellAllRemote:FireServer()
-    repeat task.wait();sellAllRemote:FireServer() until #Backpack:GetChildren() < AutoSellItems -- waits until its sold(until the current items in the inventory are less than the required items for)
+    repeat task.wait();sellAllRemote:FireServer() until #Backpack:GetChildren() < AutoSellItems
     HRP.CFrame = OrgPos
     task.wait(1)
     isSelling = false
@@ -425,7 +426,7 @@ spawn(function()
         shopTime = getTimeInSeconds(shopTimer.Text)
         local shopTimeText = "Shop Resets in " .. shopTime .. "s"
         RayFieldShopTimer:Set({Title = "Shop Timer", Content = shopTimeText})
-        if shopTime == 298 then -- i did 298 just in case, tests every 0.2 seconds so just making sure
+        if shopTime == 298 then
             onShopRefresh()
             wait(5)
         end
@@ -438,42 +439,41 @@ spawn(function()
     end
 end)
 
+-- LocalPlayer tab (existing)
 localPlayerTab = Window:CreateTab("LocalPlayer")
-localPlayerTab:CreateButton(
-    {
-        Name = "TP Wand",
-        Callback = function()
-            local mouse = Players.LocalPlayer:GetMouse()
-            local TPWand = Instance.new("Tool", Backpack)
-            TPWand.Name = "TP Wand"
-            mouse.Button1Down:Connect(function()
-                if Character:FindFirstChild("TP Wand") then
-                    HRP.CFrame = mouse.Hit
-                end
-            end)
-        end,    
-    })
-    localPlayerTab:CreateButton(
-    {
-        Name = "Destroy TP Wand",
-        Callback = function()
-            if Backpack:FindFirstChild("TP Wand") then
-                Backpack:FindFirstChild("TP Wand"):Destroy()
-            end
+localPlayerTab:CreateButton({
+    Name = "TP Wand",
+    Callback = function()
+        local mouse = Players.LocalPlayer:GetMouse()
+        local TPWand = Instance.new("Tool", Backpack)
+        TPWand.Name = "TP Wand"
+        mouse.Button1Down:Connect(function()
             if Character:FindFirstChild("TP Wand") then
-                Character:FindFirstChild("TP Wand"):Destroy()
+                HRP.CFrame = mouse.Hit
             end
-        end,    
-    })
+        end)
+    end,    
+})
+localPlayerTab:CreateButton({
+    Name = "Destroy TP Wand",
+    Callback = function()
+        if Backpack:FindFirstChild("TP Wand") then
+            Backpack:FindFirstChild("TP Wand"):Destroy()
+        end
+        if Character:FindFirstChild("TP Wand") then
+            Character:FindFirstChild("TP Wand"):Destroy()
+        end
+    end,    
+})
 local speedSlider = localPlayerTab:CreateSlider({
    Name = "Speed",
    Range = {1, 500},
    Increment = 5,
    Suffix = "Speed",
    CurrentValue = 20,
-   Flag = "Slider1", -- A flag is the identifier for the configuration file, make sure every element has a different flag if you're using configuration saving to ensure no overlaps
+   Flag = "Slider1",
    Callback = function(Value)
-   Humanoid.WalkSpeed = Value
+       Humanoid.WalkSpeed = Value
    end,
 })
 localPlayerTab:CreateButton({
@@ -481,16 +481,16 @@ localPlayerTab:CreateButton({
     Callback = function()
         speedSlider:Set(20)
     end,
-    })
+})
 local jumpSlider = localPlayerTab:CreateSlider({
    Name = "Jump Power",
    Range = {1, 500},
    Increment = 5,
    Suffix = "Jump Power",
    CurrentValue = 50,
-   Flag = "Slider2", -- A flag is the identifier for the configuration file, make sure every element has a different flag if you're using configuration saving to ensure no overlaps
+   Flag = "Slider2",
    Callback = function(Value)
-   Humanoid.JumpPower = Value
+       Humanoid.JumpPower = Value
    end,
 })
 localPlayerTab:CreateButton({
@@ -498,7 +498,9 @@ localPlayerTab:CreateButton({
     Callback = function()
         jumpSlider:Set(50)
     end,
-    })
+})
+
+-- Seeds tab (existing)
 local seedsTab = Window:CreateTab("Seeds")
 seedsTab:CreateDropdown({
    Name = "Fruits To Buy",
@@ -507,7 +509,6 @@ seedsTab:CreateDropdown({
    MultipleOptions = true,
    Flag = "Dropdown1", 
    Callback = function(Options)
-      
     local filtered = {}
     for _, fruit in ipairs(Options) do
         if fruit ~= "None Selected" then
@@ -518,8 +519,10 @@ seedsTab:CreateDropdown({
     wantedFruits = filtered
     print("Updated!")
     buyWantedCropSeeds()
-    end,
+   end,
 })
+
+-- Sell tab (existing)
 local sellTab = Window:CreateTab("Sell")
 sellTab:CreateToggle({
     Name = "Should Sell?",
@@ -536,82 +539,174 @@ sellTab:CreateSlider({
    Increment = 1,
    Suffix = "Items",
    CurrentValue = 70,
-   Flag = "Slider2", -- A flag is the identifier for the configuration file, make sure every element has a different flag if you're using configuration saving to ensure no overlaps
+   Flag = "Slider2",
    Callback = function(Value)
     print("AutoSellItems updated to: "..Value)
     AutoSellItems = Value
    end,
 })
 
---// =========================================
---// AUTO TRADE ALL PET FEATURE (ADDED)
---// =========================================
+-- ============================================================
+-- ============== NEW: Pets Automation Integration =============
+-- ============================================================
 
-local TradeTab = Window:CreateTab("Trade")
-local autoTrade = false
-local tradeTarget = nil
-local TradePet = ReplicatedStorage:FindFirstChild("GameEvents") and ReplicatedStorage.GameEvents:FindFirstChild("Trade_Pet")
-
-TradeTab:CreateInput({
-    Name = "Trade Target (Player Name)",
-    PlaceholderText = "Enter player name...",
-    RemoveTextAfterFocusLost = false,
-    Callback = function(value)
-        tradeTarget = value
-        print("Trade target set to:", tradeTarget)
-    end,
-})
-
-TradeTab:CreateToggle({
-    Name = "Auto Trade All Pets",
-    CurrentValue = false,
-    Flag = "AutoTradeToggle",
-    Callback = function(Value)
-        autoTrade = Value
-        print("Auto trade all pets set to:", tostring(autoTrade))
-    end,
-})
-
--- fungsi untuk kirim semua pet
-local function tradeAllPets()
-    if not TradePet then
-        warn("⚠️ Trade_Pet remote event not found!")
-        return
-    end
-    if not tradeTarget or tradeTarget == "" then
-        warn("⚠️ No trade target specified!")
-        return
-    end
-
-    local targetPlayer = Players:FindFirstChild(tradeTarget)
-    if not targetPlayer then
-        warn("⚠️ Target player not found in game!")
-        return
-    end
-
-    local backpackPets = {}
-    for _, item in pairs(Backpack:GetChildren()) do
-        if item:FindFirstChild("PetData") or item:IsA("Model") and item.Name:match("Pet") then
-            table.insert(backpackPets, item)
-        end
-    end
-
-    print("Found "..#backpackPets.." pets to trade.")
-    for _, pet in pairs(backpackPets) do
-        pcall(function()
-            TradePet:FireServer(targetPlayer, pet)
-            task.wait(0.2)
-        end)
-    end
-    print("✅ All pets traded to "..tradeTarget)
+--// Remote for gifting pets (adjust name if necessary)
+local GiftPet = nil
+-- try common names safely
+if ReplicatedStorage:FindFirstChild("GameEvents") then
+    local ge = ReplicatedStorage:FindFirstChild("GameEvents")
+    GiftPet = ge:FindFirstChild("GiftPet_RE") or ge:FindFirstChild("GiftPet") or ge:FindFirstChild("SendPet") or ge:FindFirstChild("SendGiftPet")
+end
+-- fallback warn
+if not GiftPet then
+    warn("[PETS] GiftPet remote not found in ReplicatedStorage.GameEvents. Please set correct remote name.")
 end
 
--- loop auto trade
+-- Pets UI & logic
+local petsTab = Window:CreateTab("Pets", "paw")
+local PETS = {} -- placeholder if needed
+
+local targetPlayerName = "" -- string name input by user
+local autoGiftPets = false
+
+-- Helper: check for pets in backpack
+local function areTherePetsInBackpack()
+    for _, item in pairs(Backpack:GetChildren()) do
+        if item:FindFirstChild("Pet Local Script") then
+            return true
+        end
+    end
+    return false
+end
+
+-- Helper: resolve target player object from name
+local function getTargetPlayer()
+    if not targetPlayerName or targetPlayerName == "" then
+        return nil
+    end
+    return Players:FindFirstChild(targetPlayerName)
+end
+
+-- Main: gift all pets once (to current resolved target)
+local function giftAllPetsOnce(resolvedTarget)
+    if not resolvedTarget then
+        warn("[PETS] giftAllPetsOnce called with nil target")
+        return
+    end
+    if not GiftPet then
+        warn("[PETS] GiftPet remote missing, can't send pets.")
+        return
+    end
+
+    print("[PETS] Gifting all pets to: ".. resolvedTarget.Name)
+    task.wait(0.5)
+    for _, Pet in pairs(Backpack:GetChildren()) do
+        if Pet and Pet:FindFirstChild("Pet Local Script") then
+            -- parent to character to mimic player using it
+            pcall(function() Pet.Parent = Character end)
+            task.wait(0.12)
+
+            local petName = Pet:GetAttribute("PetName") or Pet.Name
+            local args = {
+                [1] = resolvedTarget,
+                [2] = petName,
+                [3] = Pet
+            }
+
+            local ok, err = pcall(function()
+                GiftPet:FireServer(unpack(args))
+            end)
+
+            if ok then
+                print(string.format("[PETS] Sent pet '%s' to %s", petName, resolvedTarget.Name))
+            else
+                warn(string.format("[PETS] Failed to send '%s': %s", petName, tostring(err)))
+            end
+
+            task.wait(0.2)
+
+            -- ensure pet returned to backpack if still present and not in backpack
+            if Pet and Pet:IsDescendantOf(game) and Pet.Parent ~= Backpack then
+                pcall(function() Pet.Parent = Backpack end)
+            end
+        end
+    end
+end
+
+-- Loop for auto-gift (runs in background)
 task.spawn(function()
     while true do
-        if autoTrade then
-            tradeAllPets()
+        task.wait(0.6)
+        if autoGiftPets then
+            local resolved = getTargetPlayer()
+            if not resolved or not resolved.Parent then
+                warn("[PETS] Target '"..tostring(targetPlayerName).."' not found. Waiting for target to join...")
+                -- wait until target appears or autoGift disabled
+                repeat
+                    task.wait(1.5)
+                    if not autoGiftPets then break end
+                    resolved = getTargetPlayer()
+                until resolved
+                if not autoGiftPets then
+                    print("[PETS] Auto Gift disabled while waiting for target.")
+                    continue
+                end
+                print("[PETS] Target rejoined: ".. (resolved and resolved.Name or "unknown"))
+            end
+
+            if not areTherePetsInBackpack() then
+                -- nothing to send; wait a bit
+                task.wait(2)
+                continue
+            end
+
+            -- perform one pass gifting
+            giftAllPetsOnce(resolved)
+            -- short cooldown to avoid spamming server
+            task.wait(3)
         end
-        task.wait(5) -- trade check interval
     end
 end)
+
+-- UI elements for Pets
+petsTab:CreateSection("Gift Pets")
+
+petsTab:CreateInput({
+    Name = "Target Player Name",
+    PlaceholderText = "Masukkan nama player tujuan...",
+    RemoveTextAfterFocusLost = false,
+    Callback = function(value)
+        targetPlayerName = tostring(value or "")
+        print("[PETS][UI] Target player set to:", targetPlayerName)
+    end,
+})
+
+petsTab:CreateButton({
+    Name = "Gift All Pets (Once)",
+    Callback = function()
+        local resolved = getTargetPlayer()
+        if not resolved then
+            warn("[PETS] Target player not found: "..tostring(targetPlayerName))
+            return
+        end
+        giftAllPetsOnce(resolved)
+    end,
+})
+
+petsTab:CreateToggle({
+    Name = "Auto Gift Pets",
+    CurrentValue = false,
+    Flag = "ToggleAutoGiftPets",
+    Callback = function(value)
+        autoGiftPets = value
+        print("[PETS][UI] Auto Gift Pets set to:", tostring(value))
+    end,
+})
+
+petsTab:CreateLabel("Note: If Gift remote name differs, change GiftPet variable in the script.")
+
+-- ============================================================
+-- End Pets Integration
+-- ============================================================
+
+-- rest of script continues (if needed)
