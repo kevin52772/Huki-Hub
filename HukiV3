@@ -220,8 +220,8 @@ local request = http_request or request or (syn and syn.request) or (fluxus and 
 
 -- Daftar pet yang boleh digift
 local AllowedGiftPets = {
-    ["Kitsune"] = true,
-    ["Dragon"] = true,
+    ["Mega Kitsune"] = true,
+    ["Mimic Octopus"] = true,
     -- Tambahkan pet lain sesuai keinginan
 }
 
